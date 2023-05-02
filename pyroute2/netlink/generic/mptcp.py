@@ -13,6 +13,10 @@ MPTCP_PM_CMD_FLUSH_ADDRS = 4
 MPTCP_PM_CMD_SET_LIMITS = 5
 MPTCP_PM_CMD_GET_LIMITS = 6
 MPTCP_PM_CMD_SET_FLAGS = 7
+MPTCP_PM_CMD_ANNOUNCE = 8
+MPTCP_PM_CMD_REMOVE = 9
+MPTCP_PM_CMD_SUBFLOW_CREATE = 10
+MPTCP_PM_CMD_SUBFLOW_DESTROY = 11
 
 
 class mptcp_msg(genlmsg):
@@ -22,6 +26,9 @@ class mptcp_msg(genlmsg):
         ('MPTCP_PM_ATTR_ADDR', 'pm_addr'),
         ('MPTCP_PM_ATTR_RCV_ADD_ADDRS', 'uint32'),
         ('MPTCP_PM_ATTR_SUBFLOWS', 'uint32'),
+        ('MPTCP_PM_ATTR_TOKEN', 'uint32'),
+        ('MPTCP_PM_ATTR_LOC_ID', 'u8'),
+        ('MPTCP_PM_ATTR_ADDR_REMOTE', 'pm_addr'),
     )
 
     class pm_addr(nla):
@@ -36,7 +43,6 @@ class mptcp_msg(genlmsg):
             ('MPTCP_PM_ADDR_ATTR_FLAGS', 'uint32'),
             ('MPTCP_PM_ADDR_ATTR_IF_IDX', 'hex'),
         )
-
 
 class MPTCP(GenericNetlinkSocket):
     def __init__(self, ext_ack=True):
@@ -66,6 +72,8 @@ class MPTCP(GenericNetlinkSocket):
             'add': (MPTCP_PM_CMD_ADD_ADDR, flags_base),
             'del': (MPTCP_PM_CMD_DEL_ADDR, flags_base),
             'flush': (MPTCP_PM_CMD_FLUSH_ADDRS, flags_base),
+            'create': (MPTCP_PM_CMD_SUBFLOW_CREATE, flags_base),
+            'destroy': (MPTCP_PM_CMD_SUBFLOW_DESTROY, flags_base),
         }
 
         (command, flags) = commands.get(cmd, cmd)
@@ -119,3 +127,62 @@ class MPTCP(GenericNetlinkSocket):
                 msg['attrs'].append((mptcp_msg.name2nla(key), value))
 
         return self.nlm_request(msg, msg_type=self.prid, msg_flags=flags)
+
+    def create(self, **kwarg):
+        # Params expected: local_ip, local_port, remote_ip, remote_port, token
+        # Expected arguments to mptcp_nl_cmd_sf_create
+        # - MPTCP_PM_ATTR_ADDR_REMOTE
+        # - MPTCP_PM_ATTR_ADDR
+        # - MPTCP_PM_ATTR_TOKEN
+
+        msg = mptcp_msg()
+        msg['cmd'] = MPTCP_PM_CMD_SUBFLOW_CREATE
+        msg['version'] = 1
+        msg['attrs'] = []
+
+        # Remote address
+        # Creates object:
+        # {'attrs': [('MPTCP_PM_ADDR_ATTR_FAMILY', 2),
+        #            ('MPTCP_PM_ADDR_ATTR_ADDR4', '192.168.1.1'),
+        #           ('MPTCP_PM_ADDR_ATTR_PORT', 1234)]}
+        addr_info = {'attrs': []}
+        addr_info['attrs'].append(
+            (mptcp_msg.pm_addr.name2nla('family'), AF_INET)
+        )
+        addr_info['attrs'].append(
+            (mptcp_msg.pm_addr.name2nla('addr4'), kwarg['remote_ip'])
+        )
+        addr_info['attrs'].append(
+            (mptcp_msg.pm_addr.name2nla('port'), kwarg['remote_port'])
+        )
+
+        msg['attrs'].append(
+            ('MPTCP_PM_ATTR_ADDR_REMOTE', addr_info, 0x8000)
+        )
+
+        # Local address
+        # Creates object:
+        # {'attrs': [('MPTCP_PM_ADDR_ATTR_FAMILY', 2),
+        #            ('MPTCP_PM_ADDR_ATTR_ADDR4', '192.168.1.2'),
+        #           ('MPTCP_PM_ADDR_ATTR_PORT', 1234)]}
+        addr_info = {'attrs': []}
+        addr_info['attrs'].append(
+            (mptcp_msg.pm_addr.name2nla('family'), AF_INET)
+        )
+        addr_info['attrs'].append(
+            (mptcp_msg.pm_addr.name2nla('addr4'), kwarg['local_ip'])
+        )
+        addr_info['attrs'].append(
+            (mptcp_msg.pm_addr.name2nla('port'), kwarg['local_port'])
+        )
+
+        msg['attrs'].append(
+            ('MPTCP_PM_ATTR_ADDR', addr_info, 0x8000)
+        )
+
+        # Token
+        msg['attrs'].append(
+            (mptcp_msg.name2nla('token'), kwarg['token'])
+        )
+
+        return self.nlm_request(msg, msg_type=self.prid, msg_flags=flags_base)
