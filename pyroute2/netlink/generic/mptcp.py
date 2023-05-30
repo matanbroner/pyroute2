@@ -27,7 +27,7 @@ class mptcp_msg(genlmsg):
         ('MPTCP_PM_ATTR_RCV_ADD_ADDRS', 'uint32'),
         ('MPTCP_PM_ATTR_SUBFLOWS', 'uint32'),
         ('MPTCP_PM_ATTR_TOKEN', 'uint32'),
-        ('MPTCP_PM_ATTR_LOC_ID', 'u8'),
+        ('MPTCP_PM_ATTR_LOC_ID', 'uint8'),
         ('MPTCP_PM_ATTR_ADDR_REMOTE', 'pm_addr'),
     )
 
@@ -135,6 +135,9 @@ class MPTCP(GenericNetlinkSocket):
         # - MPTCP_PM_ATTR_ADDR
         # - MPTCP_PM_ATTR_TOKEN
 
+        flags_dump = NLM_F_REQUEST | NLM_F_DUMP
+        flags_base = NLM_F_REQUEST | NLM_F_ACK
+
         msg = mptcp_msg()
         msg['cmd'] = MPTCP_PM_CMD_SUBFLOW_CREATE
         msg['version'] = 1
@@ -174,6 +177,9 @@ class MPTCP(GenericNetlinkSocket):
         )
         addr_info['attrs'].append(
             (mptcp_msg.pm_addr.name2nla('port'), kwarg['local_port'])
+        )
+        addr_info['attrs'].append(
+            (mptcp_msg.pm_addr.name2nla('id'), kwarg['local_id'])
         )
 
         msg['attrs'].append(
